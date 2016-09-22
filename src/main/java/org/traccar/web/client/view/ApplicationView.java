@@ -27,7 +27,7 @@ import com.sencha.gxt.widget.core.client.ContentPanel;
 import com.sencha.gxt.widget.core.client.button.ToolButton;
 import com.sencha.gxt.widget.core.client.container.BorderLayoutContainer;
 import com.sencha.gxt.widget.core.client.event.SelectEvent;
-import org.traccar.web.shared.model.Position;
+import org.traccar.web.client.ApplicationContext;
 
 public class ApplicationView extends Composite {
 
@@ -37,19 +37,25 @@ public class ApplicationView extends Composite {
     }
 
     @UiField(provided = true)
-    ContentPanel devicePanel;
+    final ContentPanel navPanel;
 
     @UiField(provided = true)
-    ContentPanel mapPanel;
+    final ContentPanel devicePanel;
 
     @UiField(provided = true)
-    ContentPanel archivePanel;
+    final ContentPanel mapPanel;
+
+    @UiField(provided = true)
+    final ContentPanel archivePanel;
 
     @UiField
     BorderLayoutContainer container;
 
     @UiField
     BorderLayoutContainer.BorderLayoutData southData;
+
+    @UiField
+    BorderLayoutContainer.BorderLayoutData westData;
 
     class ExpandCollapseHandler implements ResizeHandler, SelectEvent.SelectHandler {
         final int toolbarSize;
@@ -103,13 +109,25 @@ public class ApplicationView extends Composite {
         }
     }
 
-    public ApplicationView(ContentPanel deviceView, ContentPanel mapView, ContentPanel archiveView) {
+    public ApplicationView(ContentPanel navView,
+                           ContentPanel deviceView,
+                           ContentPanel mapView,
+                           ContentPanel archiveView) {
+        navPanel = navView;
         devicePanel = deviceView;
         mapPanel = mapView;
         archivePanel = archiveView;
 
         initWidget(uiBinder.createAndBindUi(this));
 
-        new ExpandCollapseHandler(southData, Style.LayoutRegion.SOUTH, archivePanel, 52);
+        if (!ApplicationContext.getInstance().getUser().isArchive()) {
+            archivePanel.removeFromParent();
+        }
+
+        if (devicePanel.getElement().getSize().getWidth() < 350) {
+            westData.setSize(350);
+        }
+
+        new ExpandCollapseHandler(southData, Style.LayoutRegion.SOUTH, archivePanel, 84);
     }
 }

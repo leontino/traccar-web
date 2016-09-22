@@ -31,14 +31,27 @@ public interface DeviceProperties extends PropertyAccess<Device> {
 
     ValueProvider<Device, String> name();
 
+    ValueProvider<Device, String> description();
+
+    ValueProvider<Device, String> phoneNumber();
+
+    ValueProvider<Device, String> plateNumber();
+
+    ValueProvider<Device, String> vehicleInfo();
+
     ValueProvider<Device, Integer> timeout();
 
     ValueProvider<Device, Double> idleSpeedThreshold();
 
+    ValueProvider<Device, String> iconArrowMovingColor();
+    ValueProvider<Device, String> iconArrowPausedColor();
+    ValueProvider<Device, String> iconArrowStoppedColor();
+    ValueProvider<Device, String> iconArrowOfflineColor();
+
     @Path("name")
     LabelProvider<Device> label();
 
-    ValueProvider<Device, Boolean> follow();
+    ValueProvider<Device, Double> odometer();
 
-    ValueProvider<Device, Boolean> recordTrace();
+    ValueProvider<Device, Boolean> autoUpdateOdometer();
 }

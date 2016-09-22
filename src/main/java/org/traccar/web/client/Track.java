@@ -15,6 +15,7 @@
  */
 package org.traccar.web.client;
 
+import org.traccar.web.shared.model.LonLat;
 import org.traccar.web.shared.model.Position;
 
 import java.util.Collections;
@@ -22,23 +23,28 @@ import java.util.LinkedList;
 import java.util.List;
 
 public class Track {
-
-    public List<TrackSegment> segments = new LinkedList<TrackSegment>();
+    private final List<TrackSegment> segments = new LinkedList<>();
 
     public Track() {
     }
 
     public Track(List<Position> positions) {
-        segments.add(new TrackSegment(positions, new ArchiveStyle()));
+        segments.add(new TrackSegment(positions, null, new ArchiveStyle()));
     }
 
     public Track(List<Position> positions, ArchiveStyle style) {
-        segments.add(new TrackSegment(positions, style));
+        segments.add(new TrackSegment(positions, null, style));
     }
 
     public void setStyle(ArchiveStyle style) {
         for (TrackSegment segment : segments) {
             segment.setStyle(style);
+        }
+    }
+
+    public void addSegment(List<Position> positions, List<LonLat> geometry, ArchiveStyle style) {
+        if (positions.size() > 0) {
+            segments.add(new TrackSegment(positions, geometry, style));
         }
     }
 
@@ -55,7 +61,7 @@ public class Track {
         } else if (segments.size() == 1) {
             return segments.get(0).getPositions();
         } else {
-            List<Position> positions = new LinkedList<Position>();
+            List<Position> positions = new LinkedList<>();
             for (TrackSegment segment : segments) {
                 for (Position position : segment.getPositions()) {
                     positions.add(position);
@@ -65,8 +71,12 @@ public class Track {
         }
     }
 
+    public List<TrackSegment> getSegments() {
+        return segments;
+    }
+
     public List<Position> getTimePositions(long timePrintInterval) {
-        List<Position> withTime = new LinkedList<Position>();
+        List<Position> withTime = new LinkedList<>();
         long prevTime = -1;
         for (Position position : getPositions()) {
             if (prevTime < 0 ||

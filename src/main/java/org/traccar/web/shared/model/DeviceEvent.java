@@ -20,7 +20,8 @@ import java.util.Date;
 
 @Entity
 @Table(name = "events",
-       indexes = { @Index(name="events_position_event_type", columnList="position_id,type") })
+       indexes = { @Index(name="events_position_event_type", columnList="position_id,type"),
+                   @Index(name="events_sent_event_type", columnList="notificationSent,type") })
 public class DeviceEvent {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -41,9 +42,28 @@ public class DeviceEvent {
     @JoinColumn(foreignKey = @ForeignKey(name = "events_fkey_position_id"))
     private Position position;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(foreignKey = @ForeignKey(name = "events_fkey_geofence_id"))
+    private GeoFence geoFence;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(foreignKey = @ForeignKey(name = "events_fkey_maintenance_id"))
+    private Maintenance maintenance;
+
     private boolean notificationSent;
 
+    @Column(nullable = true)
+    private boolean expired;
+
     public DeviceEvent() {
+    }
+
+    public DeviceEvent(Date time, Device device, Position position, GeoFence geoFence, Maintenance maintenance) {
+        this.time = time;
+        this.device = device;
+        this.position = position;
+        this.geoFence = geoFence;
+        this.maintenance = maintenance;
     }
 
     public long getId() {
@@ -70,6 +90,14 @@ public class DeviceEvent {
         this.device = device;
     }
 
+    public GeoFence getGeoFence() {
+        return geoFence;
+    }
+
+    public void setGeoFence(GeoFence geoFence) {
+        this.geoFence = geoFence;
+    }
+
     public DeviceEventType getType() {
         return type;
     }
@@ -86,6 +114,14 @@ public class DeviceEvent {
         this.position = position;
     }
 
+    public Maintenance getMaintenance() {
+        return maintenance;
+    }
+
+    public void setMaintenance(Maintenance maintenance) {
+        this.maintenance = maintenance;
+    }
+
     public boolean isNotificationSent() {
         return notificationSent;
     }
@@ -94,27 +130,39 @@ public class DeviceEvent {
         this.notificationSent = notificationSent;
     }
 
+    public boolean isExpired() {
+        return expired;
+    }
+
+    public void setExpired(boolean expired) {
+        this.expired = expired;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (o == null || !(o instanceof DeviceEvent)) return false;
 
         DeviceEvent that = (DeviceEvent) o;
 
-        if (!device.equals(that.device)) return false;
-        if (type != that.type) return false;
-        if (position != null ? !position.equals(that.position) : that.position != null) return false;
-        if (!time.equals(that.time)) return false;
+        if (getDevice() != null ? !getDevice().equals(that.getDevice()) : that.getDevice() != null) return false;
+        if (getGeoFence() != null ? !getGeoFence().equals(that.getGeoFence()) : that.getGeoFence() != null) return false;
+        if (getPosition() != null ? !getPosition().equals(that.getPosition()) : that.getPosition() != null) return false;
+        if (getMaintenance() != null ? !getMaintenance().equals(that.getMaintenance()) : that.getMaintenance() != null) return false;
+        if (!getTime().equals(that.getTime())) return false;
+        if (getType() != that.getType()) return false;
 
         return true;
     }
 
     @Override
     public int hashCode() {
-        int result = time.hashCode();
-        result = 31 * result + device.hashCode();
-        result = 31 * result + type.hashCode();
-        result = 31 * result + (position != null ? position.hashCode() : 0);
+        int result = getTime().hashCode();
+        result = 31 * result + (getDevice() != null ? getDevice().hashCode() : 0);
+        result = 31 * result + getType().hashCode();
+        result = 31 * result + (getPosition() != null ? getPosition().hashCode() : 0);
+        result = 31 * result + (getGeoFence() != null ? getGeoFence().hashCode() : 0);
+        result = 31 * result + (getMaintenance() != null ? getMaintenance().hashCode() : 0);
         return result;
     }
 }

@@ -15,6 +15,8 @@
  */
 package org.traccar.web.client;
 
+import org.gwtopenmaps.openlayers.client.feature.VectorFeature;
+import org.traccar.web.shared.model.LonLat;
 import org.traccar.web.shared.model.Position;
 
 import java.util.*;
@@ -22,28 +24,21 @@ import java.util.*;
 public class TrackSegment {
 
     private ArchiveStyle style;
-    private List<Position> positions;
+    private final List<Position> positions;
+    private final List<LonLat> geometry;
 
-    public TrackSegment() {
-    }
-
-    public TrackSegment(List<Position> positions, ArchiveStyle style) {
-        this.positions = new ArrayList<Position>(positions);
-        Collections.sort(this.positions, new Comparator<Position>() {
-            @Override
-            public int compare(Position o1, Position o2) {
-            return o1.getTime().compareTo(o2.getTime());
-            }
-        });
-        this.style = style;
-    }
-
-    public void setPositions(List<Position> positions) {
+    public TrackSegment(List<Position> positions, List<LonLat> geometry, ArchiveStyle style) {
         this.positions = positions;
+        this.geometry = geometry;
+        this.style = style;
     }
 
     public List<Position> getPositions() {
         return this.positions;
+    }
+
+    public List<LonLat> getGeometry() {
+        return geometry;
     }
 
     public void setStyle(ArchiveStyle style) {

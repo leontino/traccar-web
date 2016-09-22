@@ -26,14 +26,9 @@ import com.sencha.gxt.widget.core.client.form.PasswordField;
 import org.traccar.web.client.Application;
 import org.traccar.web.client.ApplicationContext;
 import org.traccar.web.client.i18n.Messages;
-import org.traccar.web.client.model.BaseAsyncCallback;
-import org.traccar.web.client.model.NotificationService;
-import org.traccar.web.client.model.NotificationServiceAsync;
-import org.traccar.web.client.model.UserProperties;
+import org.traccar.web.client.model.*;
 import org.traccar.web.client.view.*;
-import org.traccar.web.shared.model.ApplicationSettings;
-import org.traccar.web.shared.model.NotificationSettings;
-import org.traccar.web.shared.model.User;
+import org.traccar.web.shared.model.*;
 
 import com.google.gwt.core.client.GWT;
 import com.sencha.gxt.data.shared.ListStore;
@@ -42,13 +37,16 @@ import com.sencha.gxt.widget.core.client.box.AlertMessageBox;
 import com.sencha.gxt.widget.core.client.box.ConfirmMessageBox;
 import com.sencha.gxt.widget.core.client.event.DialogHideEvent;
 
-public class SettingsController implements DeviceView.SettingsHandler {
+public class SettingsController implements NavView.SettingsHandler {
 
     private Messages i18n = GWT.create(Messages.class);
     private final UserSettingsDialog.UserSettingsHandler userSettingsHandler;
+    private final UserSettingsDialog.UserSettingsHandler defaultUserSettingsHandler;
 
-    public SettingsController(UserSettingsDialog.UserSettingsHandler userSettingsHandler) {
+    public SettingsController(UserSettingsDialog.UserSettingsHandler userSettingsHandler,
+                              UserSettingsDialog.UserSettingsHandler defaultUserSettingsHandler) {
         this.userSettingsHandler = userSettingsHandler;
+        this.defaultUserSettingsHandler = defaultUserSettingsHandler;
     }
 
     @Override
@@ -79,30 +77,43 @@ public class SettingsController implements DeviceView.SettingsHandler {
             @Override
             public void onSuccess(List<User> result) {
                 UserProperties userProperties = GWT.create(UserProperties.class);
-                final ListStore<User> userStore = new ListStore<User>(userProperties.id());
+                final ListStore<User> userStore = new ListStore<>(userProperties.id());
                 userStore.addAll(result);
 
                 new UsersDialog(userStore, new UsersDialog.UserHandler() {
 
                     @Override
                     public void onAdd() {
-                        new UserDialog(
-                                new User(),
-                                new UserDialog.UserHandler() {
+                        class AddHandler implements UserDialog.UserHandler {
+                            @Override
+                            public void onSave(final User user) {
+                                Application.getDataService().addUser(user, new BaseAsyncCallback<User>(i18n) {
                                     @Override
-                                    public void onSave(User user) {
-                                        Application.getDataService().addUser(user, new BaseAsyncCallback<User>(i18n) {
+                                    public void onSuccess(User result) {
+                                        userStore.add(result);
+                                    }
+                                    @Override
+                                    public void onFailure(Throwable caught) {
+                                        AlertMessageBox msg;
+                                        if (caught instanceof InvalidMaxDeviceNumberForUserException) {
+                                            InvalidMaxDeviceNumberForUserException e = (InvalidMaxDeviceNumberForUserException) caught;
+                                            msg = new AlertMessageBox(i18n.error(), i18n.errMaxNumOfDevicesExceeded(e.getAllowedDevicesNumber()));
+                                        } else {
+                                            msg = new AlertMessageBox(i18n.error(), i18n.errUsernameTaken());
+                                        }
+                                        msg.addDialogHideHandler(new DialogHideEvent.DialogHideHandler() {
                                             @Override
-                                            public void onSuccess(User result) {
-                                                userStore.add(result);
-                                            }
-                                            @Override
-                                            public void onFailure(Throwable caught) {
-                                                new AlertMessageBox(i18n.error(), i18n.errUsernameTaken()).show();
+                                            public void onDialogHide(DialogHideEvent event) {
+                                                new UserDialog(user, AddHandler.this).show();
                                             }
                                         });
+                                        msg.show();
                                     }
-                                }).show();
+                                });
+                            }
+                        }
+
+                        new UserDialog(new User(), new AddHandler()).show();
                     }
 
                     @Override
@@ -126,7 +137,7 @@ public class SettingsController implements DeviceView.SettingsHandler {
 
                     @Override
                     public void onSaveRoles() {
-                        List<User> updatedUsers = new ArrayList<User>(userStore.getModifiedRecords().size());
+                        List<User> updatedUsers = new ArrayList<>(userStore.getModifiedRecords().size());
                         for (Store<User>.Record record : userStore.getModifiedRecords()) {
                             User updatedUser = new User(record.getModel());
                             for (Store.Change<User, ?> change : record.getChanges()) {
@@ -202,11 +213,11 @@ public class SettingsController implements DeviceView.SettingsHandler {
                     }
 
                     @Override
-                    public void onTest(NotificationSettings notificationSettings) {
-                        service.checkSettings(notificationSettings, new AsyncCallback<Void>() {
+                    public void onTestEmail(NotificationSettings notificationSettings) {
+                        service.checkEmailSettings(notificationSettings, new AsyncCallback<Void>() {
                             @Override
-                            public void onFailure(Throwable throwable) {
-                                new AlertMessageBox(i18n.notificationSettings(), i18n.testFailed()).show();
+                            public void onFailure(Throwable caught) {
+                                new AlertMessageBox(i18n.notificationSettings(), i18n.testFailed() + "<br><br>" + caught.getLocalizedMessage()).show();
                             }
 
                             @Override
@@ -217,7 +228,49 @@ public class SettingsController implements DeviceView.SettingsHandler {
                             }
                         });
                     }
+
+                    @Override
+                    public void onTestPushbullet(NotificationSettings notificationSettings) {
+                        service.checkPushbulletSettings(notificationSettings, new AsyncCallback<Void>() {
+                            @Override
+                            public void onFailure(Throwable caught) {
+                                new AlertMessageBox(i18n.notificationSettings(), i18n.testFailed() + "<br><br>" + caught.getLocalizedMessage()).show();
+                            }
+
+                            @Override
+                            public void onSuccess(Void aVoid) {
+                                MessageBox messageBox = new MessageBox(i18n.notificationSettings(), i18n.testSucceeded());
+                                messageBox.setIcon(MessageBox.ICONS.info());
+                                messageBox.show();
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onTestMessageTemplate(NotificationTemplate template) {
+                        service.checkTemplate(template, new AsyncCallback<String>() {
+                            @Override
+                            public void onFailure(Throwable caught) {
+                                new AlertMessageBox(i18n.notificationSettings(), i18n.testFailed() + "<br><br>" + caught.getLocalizedMessage()).show();
+                            }
+
+                            @Override
+                            public void onSuccess(String result) {
+                                new MessageBox(i18n.notificationSettings(), result).show();
+                            }
+                        });
+                    }
                 }).show();
+            }
+        });
+    }
+
+    @Override
+    public void onDefaultPreferencesSelected() {
+        Application.getDataService().getDefaultUserSettings(new BaseAsyncCallback<UserSettings>(i18n) {
+            @Override
+            public void onSuccess(UserSettings result) {
+                new UserSettingsDialog(result, defaultUserSettingsHandler).show();
             }
         });
     }

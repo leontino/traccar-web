@@ -15,34 +15,27 @@
  */
 package org.traccar.web.client;
 
-import java.util.logging.Logger;
-
+import com.google.gwt.i18n.client.TimeZoneInfo;
+import com.sencha.gxt.data.shared.ListStore;
+import com.sencha.gxt.widget.core.client.form.CheckBox;
 import com.sencha.gxt.widget.core.client.form.ComboBox;
 import com.sencha.gxt.widget.core.client.form.NumberField;
+import com.sencha.gxt.widget.core.client.grid.GridSelectionModel;
 import org.gwtopenmaps.openlayers.client.LonLat;
-import org.gwtopenmaps.openlayers.client.Projection;
-import org.traccar.web.client.controller.ArchiveController;
-import org.traccar.web.client.controller.DeviceController;
-import org.traccar.web.client.controller.MapController;
-import org.traccar.web.client.controller.SettingsController;
+import org.gwtopenmaps.openlayers.client.layer.Layer;
+import org.traccar.web.client.controller.*;
 import org.traccar.web.client.i18n.Messages;
-import org.traccar.web.client.model.BaseAsyncCallback;
-import org.traccar.web.client.model.BaseStoreHandlers;
-import org.traccar.web.client.model.DataService;
-import org.traccar.web.client.model.DataServiceAsync;
+import org.traccar.web.client.model.*;
 import org.traccar.web.client.view.ApplicationView;
-import org.traccar.web.client.view.FilterDialog;
 import org.traccar.web.client.view.UserSettingsDialog;
-import org.traccar.web.shared.model.Device;
-import org.traccar.web.shared.model.Position;
+import org.traccar.web.client.widget.TimeZoneComboBox;
+import org.traccar.web.shared.model.*;
 
 import com.google.gwt.core.client.GWT;
 import com.google.gwt.user.client.ui.RootPanel;
 import com.sencha.gxt.data.shared.event.StoreAddEvent;
 import com.sencha.gxt.data.shared.event.StoreHandlers;
 import com.sencha.gxt.data.shared.event.StoreRemoveEvent;
-import org.traccar.web.shared.model.User;
-import org.traccar.web.shared.model.UserSettings;
 
 public class Application {
 
@@ -53,37 +46,111 @@ public class Application {
         return dataService;
     }
 
-    private static Logger logger = Logger.getLogger("");
-
-    public static Logger getLogger() {
-        return logger;
-    }
-
     private final SettingsController settingsController;
+    private final NavController navController;
+    private final ImportController importController;
     private final DeviceController deviceController;
+    private final CommandController commandController;
+    private final GeoFenceController geoFenceController;
     private final MapController mapController;
     private final ArchiveController archiveController;
+    private final ReportsController reportsController;
+    private final LogController logController;
+    private final GroupsController groupsController;
+    private final VisibilityController visibilityController;
 
     private ApplicationView view;
 
     public Application() {
-        settingsController = new SettingsController(userSettingsHandler);
-        mapController = new MapController(mapHandler);
-        deviceController = new DeviceController(mapController, settingsController, deviceStoreHandler, this);
-        archiveController = new ArchiveController(archiveHandler, userSettingsHandler, deviceController.getDeviceStore());
-        archiveController.getPositionStore().addStoreHandlers(archiveStoreHandler);
+        DeviceProperties deviceProperties = GWT.create(DeviceProperties.class);
+        final ListStore<Device> deviceStore = new ListStore<>(deviceProperties.id());
+        deviceStore.clearSortInfo();
+        final GroupStore groupStore = new GroupStore();
+        ReportProperties reportProperties = GWT.create(ReportProperties.class);
+        final ListStore<Report> reportStore = new ListStore<>(reportProperties.id());
+
+        settingsController = new SettingsController(userSettingsHandler, new DefaultUserSettingsHandlerImpl());
+        visibilityController = new VisibilityController();
+        mapController = new MapController(mapHandler, deviceStore, visibilityController);
+        geoFenceController = new GeoFenceController(deviceStore, mapController);
+        geoFenceController.getGeoFenceStore().addStoreHandlers(geoFenceStoreHandler);
+        commandController = new CommandController();
+        reportsController = new ReportsController(reportStore, deviceStore, geoFenceController.getGeoFenceStore());
+        deviceController = new DeviceController(mapController,
+                geoFenceController,
+                commandController,
+                visibilityController,
+                deviceStore,
+                deviceStoreHandler,
+                geoFenceController.getGeoFenceStore(),
+                geoFenceController.getDeviceGeoFences(),
+                groupStore,
+                reportStore,
+                reportsController,
+                this);
+        groupsController = new GroupsController(groupStore, deviceController);
+        importController = new ImportController(deviceController.getDeviceStore());
+        logController = new LogController();
+        navController = new NavController(settingsController, reportStore, reportsController, importController, logController, groupsController);
+        archiveController = new ArchiveController(archiveHandler, userSettingsHandler, deviceController.getDeviceStore(), reportStore, reportsController);
 
         view = new ApplicationView(
-                deviceController.getView(), mapController.getView(), archiveController.getView());
+                navController.getView(), deviceController.getView(), mapController.getView(), archiveController.getView());
     }
 
     public void run() {
         RootPanel.get().add(view);
 
+        navController.run();
         deviceController.run();
         mapController.run();
         archiveController.run();
+        geoFenceController.run();
+        commandController.run();
+        groupsController.run();
+        visibilityController.run();
+        reportsController.run();
+        setupTimeZone();
     }
+
+    private void setupTimeZone() {
+        UserSettings userSettings = ApplicationContext.getInstance().getUserSettings();
+        if (userSettings.getTimeZoneId() == null) {
+            String timeZoneID = getTimeZoneFromIntlApi();
+            if (timeZoneID == null) {
+                TimeZoneInfo detectedZone = TimeZoneComboBox.getByOffset(-getClientOffsetTimeZone());
+                timeZoneID = detectedZone == null ? null : detectedZone.getID();
+            }
+            if (timeZoneID != null) {
+                userSettings.setTimeZoneId(timeZoneID);
+                userSettingsHandler.onSave(userSettings);
+            }
+        }
+    }
+
+    private native String getTimeZoneFromIntlApi() /*-{
+        if (typeof Intl === "undefined" || typeof Intl.DateTimeFormat === "undefined") {
+            return null;
+        }
+
+        format = Intl.DateTimeFormat();
+
+        if (typeof format === "undefined" || typeof format.resolvedOptions === "undefined") {
+            return null;
+        }
+
+        timezone = format.resolvedOptions().timeZone;
+
+        if (timezone && (timezone.indexOf("/") > -1 || timezone === 'UTC')) {
+            return timezone;
+        }
+
+        return null;
+    }-*/;
+
+    private native int getClientOffsetTimeZone() /*-{
+        return new Date().getTimezoneOffset();
+    }-*/;
 
     private MapController.MapHandler mapHandler = new MapController.MapHandler() {
 
@@ -106,6 +173,15 @@ public class Application {
             mapController.selectArchivePosition(position);
         }
 
+        @Override
+        public void onClear(Device device) {
+            mapController.clearArchive(device);
+        }
+
+        @Override
+        public void onDrawTrack(Track track) {
+            mapController.showArchivePositions(track);
+        }
     };
 
     public ArchiveController getArchiveController() {
@@ -122,42 +198,33 @@ public class Application {
         @Override
         public void onRemove(StoreRemoveEvent<Device> event) {
             mapController.update();
+            geoFenceController.deviceRemoved(event.getItem());
         }
 
     };
 
-    private StoreHandlers<Position> archiveStoreHandler = new BaseStoreHandlers<Position>() {
-
+    private StoreHandlers<GeoFence> geoFenceStoreHandler = new BaseStoreHandlers<GeoFence>() {
         @Override
-        public void onAnything() {
-            mapController.showArchivePositions(
-                    new Track(
-                            archiveController.getPositionStore().getAll(),
-                            archiveController.getStyle()
-                    )
-            );
+        public void onAdd(StoreAddEvent<GeoFence> event) {
+            for (GeoFence geoFence : event.getItems()) {
+                geoFenceController.geoFenceAdded(geoFence);
+            }
         }
 
+        @Override
+        public void onRemove(StoreRemoveEvent<GeoFence> event) {
+            geoFenceController.geoFenceRemoved(event.getItem());
+        }
     };
 
-    private class UserSettingsHandlerImpl implements UserSettingsDialog.UserSettingsHandler, FilterDialog.FilterSettingsHandler {
+    private abstract class AbstractUserSettingsHandlerImpl implements UserSettingsDialog.UserSettingsHandler {
         @Override
-        public void onSave(UserSettings userSettings) {
-            ApplicationContext.getInstance().setUserSettings(userSettings);
-            User user = ApplicationContext.getInstance().getUser();
-            Application.getDataService().updateUser(user, new BaseAsyncCallback<User>(i18n) {
-                @Override
-                public void onSuccess(User result) {
-                    ApplicationContext.getInstance().setUser(result);
-                }
-            });
-        }
-
-        @Override
-        public void onTakeCurrentMapState(ComboBox<UserSettings.MapType> mapType,
+        public final void onTakeCurrentMapState(ComboBox<UserSettings.MapType> mapType,
                                           NumberField<Double> centerLongitude,
                                           NumberField<Double> centerLatitude,
-                                          NumberField<Integer> zoomLevel) {
+                                          NumberField<Integer> zoomLevel,
+                                          CheckBox maximizeOverviewMap,
+                                          GridSelectionModel<UserSettings.OverlayType> overlays) {
             String layerName = mapController.getMap().getBaseLayer().getName();
             for (UserSettings.MapType mapTypeXX : UserSettings.MapType.values()) {
                 if (layerName.equals(mapTypeXX.getName())) {
@@ -166,12 +233,46 @@ public class Application {
                 }
             }
             LonLat center = mapController.getMap().getCenter();
-            center.transform(mapController.getMap().getProjection(), new Projection("EPSG:4326").getProjectionCode());
+            center.transform(mapController.getMap().getProjection(), "EPSG:4326");
             centerLongitude.setValue(center.lon());
             centerLatitude.setValue(center.lat());
             zoomLevel.setValue(mapController.getMap().getZoom());
+            maximizeOverviewMap.setValue(mapController.getOverviewMap().getJSObject()
+                    .getProperty("maximizeDiv").getProperty("style").getPropertyAsString("display").equals("none"));
+
+            overlays.deselectAll();
+            for (UserSettings.OverlayType overlayType : UserSettings.OverlayType.values()) {
+                Layer[] mapLayer = mapController.getMap().getLayersByName(i18n.overlayType(overlayType));
+                if (mapLayer != null && mapLayer.length == 1 && mapLayer[0].isVisible()) {
+                    overlays.select(overlayType, true);
+                }
+            }
+        }
+
+        @Override
+        public final void onSetZoomLevelToCurrent(NumberField<Short> field) {
+            field.setValue((short) mapController.getMap().getZoom());
         }
     }
 
-    private UserSettingsHandlerImpl userSettingsHandler = new UserSettingsHandlerImpl();
+    private class UserSettingsHandlerImpl extends AbstractUserSettingsHandlerImpl {
+        @Override
+        public void onSave(UserSettings userSettings) {
+            Application.getDataService().updateUserSettings(userSettings, new BaseAsyncCallback<UserSettings>(i18n) {
+                @Override
+                public void onSuccess(UserSettings result) {
+                    ApplicationContext.getInstance().setUserSettings(result);
+                }
+            });
+        }
+    }
+
+    private class DefaultUserSettingsHandlerImpl extends AbstractUserSettingsHandlerImpl {
+        @Override
+        public void onSave(UserSettings userSettings) {
+            getDataService().saveDefaultUserSettigs(userSettings, new BaseAsyncCallback<Void>(i18n));
+        }
+    }
+
+    private UserSettingsDialog.UserSettingsHandler userSettingsHandler = new UserSettingsHandlerImpl();
 }

@@ -18,9 +18,7 @@ package org.traccar.web.server.model;
 import com.google.inject.persist.Transactional;
 import org.apache.commons.lang3.StringEscapeUtils;
 import org.traccar.web.client.model.DataService;
-import org.traccar.web.shared.model.Device;
-import org.traccar.web.shared.model.Position;
-import org.traccar.web.shared.model.User;
+import org.traccar.web.shared.model.*;
 
 import javax.inject.Inject;
 import javax.inject.Provider;
@@ -36,9 +34,11 @@ import javax.xml.stream.XMLStreamWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.text.DateFormat;
+import java.text.DecimalFormatSymbols;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Locale;
 import java.util.TimeZone;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -51,6 +51,8 @@ public class ExportServlet extends HttpServlet {
     private Provider<EntityManager> entityManager;
     @Inject
     private DataService dataService;
+    @Inject
+    private Provider<ApplicationSettings> applicationSettings;
     @Inject
     protected Logger logger;
 
@@ -73,7 +75,11 @@ public class ExportServlet extends HttpServlet {
             checkAccess(device);
 
             if (exportType.equals("csv")) {
-                csv(resp, device, from, to, filter);
+                String languageCode = req.getParameter("locale");
+                if (languageCode == null) {
+                    languageCode = applicationSettings.get().getLanguage();
+                }
+                csv(resp, "default".equals(languageCode) ? Locale.getDefault() : new Locale(languageCode), device, from, to, filter);
             } else if (exportType.equals("gpx")) {
                 gpx(resp, device, from, to, filter);
             } else {
@@ -88,6 +94,8 @@ public class ExportServlet extends HttpServlet {
         } catch (IOException ioex) {
             logger.log(Level.WARNING, ioex.getLocalizedMessage(), ioex);
             throw ioex;
+        } catch (AccessDeniedException ade) {
+            throw new ServletException(ade);
         }
     }
 
@@ -98,14 +106,16 @@ public class ExportServlet extends HttpServlet {
         }
     }
 
-    void csv(HttpServletResponse response, Device device, Date from, Date to, boolean filter) throws IOException {
+    void csv(HttpServletResponse response, Locale locale, Device device, Date from, Date to, boolean filter) throws IOException, AccessDeniedException {
         response.setContentType("text/csv;charset=UTF-8");
         response.setHeader("Content-Disposition", "attachment; filename=traccar-positions.csv");
 
-        final char SEPARATOR = ';';
+        DecimalFormatSymbols formatSymbols = new DecimalFormatSymbols(locale);
+        final char SEPARATOR = formatSymbols.getDecimalSeparator() == ',' ? ';' : ',';
 
         PrintWriter writer = response.getWriter();
 
+        writer.println("sep=" + SEPARATOR);
         writer.println(line(SEPARATOR, "time", "valid", "latitude", "longitude", "altitude", "speed", "distance", "course", "power", "address", "other"));
 
         for (Position p : dataService.getPositions(device, from, to, filter)) {
@@ -125,8 +135,8 @@ public class ExportServlet extends HttpServlet {
         return result.toString();
     }
 
-    void gpx(HttpServletResponse response, Device device, Date from, Date to, boolean filter) throws IOException, XMLStreamException {
-        response.setContentType("text/xml;charset=UTF-8");
+    void gpx(HttpServletResponse response, Device device, Date from, Date to, boolean filter) throws IOException, XMLStreamException, AccessDeniedException {
+        response.setContentType("application/gpx+xml;charset=UTF-8");
         response.setHeader("Content-Disposition", "attachment; filename=traccar-positions.gpx");
 
         TimeZone tz = TimeZone.getTimeZone("UTC");
@@ -137,6 +147,7 @@ public class ExportServlet extends HttpServlet {
 
         xsw.writeStartDocument("UTF-8", "1.0");
         xsw.writeStartElement("gpx");
+        xsw.writeAttribute("version", "1.1");
         xsw.writeAttribute("xmlns", "http://www.topografix.com/GPX/1/1");
         xsw.writeAttribute("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
         xsw.writeAttribute("xmlns:traccar", "http://www.traccar.org");
@@ -200,6 +211,11 @@ public class ExportServlet extends HttpServlet {
             if (p.getPower() != null) {
                 xsw.writeStartElement("traccar:power");
                 xsw.writeCharacters(p.getPower().toString());
+                xsw.writeEndElement();
+            }
+            if (p.getProtocol() != null) {
+                xsw.writeStartElement("traccar:protocol");
+                xsw.writeCharacters(p.getProtocol());
                 xsw.writeEndElement();
             }
             if (p.getOther() != null && !p.getOther().trim().isEmpty()) {

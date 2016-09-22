@@ -19,10 +19,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
-import org.traccar.web.shared.model.ApplicationSettings;
-import org.traccar.web.shared.model.Device;
-import org.traccar.web.shared.model.Position;
-import org.traccar.web.shared.model.User;
+import org.traccar.web.shared.model.*;
 
 import com.google.gwt.user.client.rpc.AsyncCallback;
 
@@ -44,6 +41,8 @@ public interface DataServiceAsync {
 
     void updateUser(User user, AsyncCallback<User> callback);
 
+    void updateUserSettings(UserSettings userSettings, AsyncCallback<UserSettings> callback);
+
     void removeUser(User user, AsyncCallback<User> callback);
 
     void getDevices(AsyncCallback<List<Device>> callback);
@@ -62,13 +61,27 @@ public interface DataServiceAsync {
 
     void getApplicationSettings(AsyncCallback<ApplicationSettings> async);
 
-    void getTrackerServerLog(short sizeKB, AsyncCallback<String> async);
-
     void saveRoles(List<User> users, AsyncCallback<Void> async);
 
     void getDeviceShare(Device device, AsyncCallback<Map<User, Boolean>> async);
 
     void saveDeviceShare(Device device, Map<User, Boolean> share, AsyncCallback<Void> async);
 
-    void getLatestNonIdlePositions(AsyncCallback<List<Position>> async);
+    void getGeoFences(AsyncCallback<List<GeoFence>> async);
+
+    void updateGeoFence(GeoFence geoFence, AsyncCallback<GeoFence> async);
+
+    void addGeoFence(GeoFence geoFence, AsyncCallback<GeoFence> async);
+
+    void removeGeoFence(GeoFence geoFence, AsyncCallback<GeoFence> async);
+
+    void getGeoFenceShare(GeoFence geoFence, AsyncCallback<Map<User, Boolean>> async);
+
+    void saveGeoFenceShare(GeoFence geoFence, Map<User, Boolean> share, AsyncCallback<Void> async);
+
+    void sendCommand(Command command, AsyncCallback<String> async);
+
+    void saveDefaultUserSettigs(UserSettings userSettings, AsyncCallback<Void> async);
+
+    void getDefaultUserSettings(AsyncCallback<UserSettings> async);
 }

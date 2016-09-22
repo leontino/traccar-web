@@ -1,18 +1,20 @@
 <!DOCTYPE html>
-<html>
-<head lang="en">
+<html lang="en">
+<head>
     <!-- Required meta tags-->
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, minimal-ui">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
     <title>Traccar mobile</title>
-    <!-- Path to Framework7 Library CSS-->
-    <link rel="stylesheet" href="css/framework7.min.css">
+    <!-- Path to Framework7 iOS CSS theme styles-->
+    <link rel="stylesheet" href="css/framework7.ios.min.css">
+    <!-- Path to Framework7 iOS related color styles -->
+    <link rel="stylesheet" href="css/framework7.ios.colors.min.css">
     <!-- Path to your custom app styles-->
     <link rel="stylesheet" href="css/traccar-mobile.css">
     <!-- OpenLayers -->
-    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/ol3/3.3.0/ol.css" type="text/css">
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/ol3/3.15.1/ol.css" type="text/css">
     <!-- i18n -->
     <script type="text/javascript" src="js/i18n/Messages.js"></script>
 </head>
@@ -36,7 +38,9 @@
 <!-- Path to Framework7 Library JS-->
 <script type="text/javascript" src="js/framework7.min.js"></script>
 <!-- OpenLayers 3 -->
-<script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/ol3/3.3.0/ol.min.js"></script>
+<script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/ol3/3.15.1/ol-debug.js"></script>
+<!-- Arrow style -->
+<script type="text/javascript" src="js/arrowstyle.js"></script>
 <!-- Google maps -->
 <script type="text/javascript" src="//maps.google.com/maps/api/js?v=3&sensor=false"></script>
 <!-- template7 templates -->
@@ -68,17 +72,15 @@
                 <a href="#" class="button button-fill color-green" id="device-{{device.id}}-select-on-map">{{i18n.select_on_map}}</a>
             </div>
         </div>
-        <!-- div class="row" style="padding-top: 20px;">
-            <div class="col-33">Follow</div>
-            <div class="col-66">
-                <div class="item-input">
-                    <label class="label-switch">
-                        <input type="checkbox">
-                        <div class="checkbox"></div>
-                    </label>
-                </div>
+        <div class="row" style="margin-top: 10px;">
+            <div class="col-100">
+                {{#if follow}}
+                <a href="#" class="button color-blue active" id="device-{{device.id}}-unfollow">{{i18n.stop_following}}</a>
+                {{else}}
+                <a href="#" class="button color-blue" id="device-{{device.id}}-follow">{{i18n.follow}}</a>
+                {{/if}}
             </div>
-        </div -->
+        </div>
     </div>
     <div class="content-block">
         <div class="row">
@@ -121,6 +123,17 @@
         </div>
             {{/each}}
         {{/if}}
+        {{#each geoFences}}
+        <div class="row">
+            <div class="col-100">
+                <div class="geofence-color-box" style="background-color: #{{color}};"></div> {{name}}
+            </div>
+        </div>
+        {{/each}}
+    </div>
+    <div class="content-block">
+        <a href="#" class="link" id="device-{{device.id}}-send-email"><i class="icon icon-form-email"></i></a>
+        <a href="#" class="link" id="device-{{device.id}}-send-sms"><i class="icon icon-form-comment"></i></a>
     </div>
 </script>
 <!-- Path to your app js-->

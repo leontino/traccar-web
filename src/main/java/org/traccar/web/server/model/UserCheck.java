@@ -44,7 +44,7 @@ public class UserCheck implements MethodInterceptor {
         }
     }
 
-    private final ThreadLocal<Role[]> rolesChecked = new ThreadLocal<Role[]>();
+    private final ThreadLocal<Role[]> rolesChecked = new ThreadLocal<>();
     void checkRequireUser(RequireUser requireUser) {
         if (rolesChecked.get() != null) {
             // this method require an logged in user
@@ -68,6 +68,12 @@ public class UserCheck implements MethodInterceptor {
         if (user == null) {
             throw new SecurityException("Not logged in");
         }
+        if (user.isBlocked()) {
+            throw new SecurityException("User account is blocked");
+        }
+        if (user.isExpired()) {
+            throw new SecurityException("User account expired");
+        }
         if (requireUser.roles().length > 0) {
             StringBuilder roles = new StringBuilder();
             for (Role role : requireUser.roles()) {
@@ -86,7 +92,7 @@ public class UserCheck implements MethodInterceptor {
         }
     }
 
-    final ThreadLocal<Boolean> checkedDeviceManagement = new ThreadLocal<Boolean>();
+    final ThreadLocal<Boolean> checkedDeviceManagement = new ThreadLocal<>();
     void checkDeviceManagementAccess(ManagesDevices managesDevices) throws Throwable {
         if (checkedDeviceManagement.get() != null) {
             return;
@@ -103,7 +109,7 @@ public class UserCheck implements MethodInterceptor {
         }
     }
 
-    final ThreadLocal<Boolean> checkedRequireWrite = new ThreadLocal<Boolean>();
+    final ThreadLocal<Boolean> checkedRequireWrite = new ThreadLocal<>();
     void checkRequireWrite(RequireWrite requireWrite) {
         if (checkedRequireWrite.get() != null) {
             return;

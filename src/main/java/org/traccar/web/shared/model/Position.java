@@ -15,8 +15,8 @@
  */
 package org.traccar.web.shared.model;
 
-import java.io.Serializable;
 import java.util.Date;
+import java.util.List;
 
 import javax.persistence.Column;
 import javax.persistence.Entity;
@@ -33,20 +33,25 @@ import javax.persistence.Temporal;
 import javax.persistence.TemporalType;
 import javax.persistence.Transient;
 
-import com.google.gson.annotations.Expose;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.google.gwt.user.client.rpc.GwtTransient;
 
+import com.google.gwt.user.client.rpc.IsSerializable;
 import org.traccar.web.client.ArchiveStyle;
 
 @Entity
 @Table(name = "positions",
        indexes = { @Index(name="positionsIndex", columnList="device_id,time") })
-public class Position implements Serializable, Cloneable {
+public class Position implements IsSerializable, Cloneable {
 
     private static final long serialVersionUID = 1;
 
     public enum Status {
-        ARCHIVE, OFFLINE, LATEST;
+        OFFLINE, LATEST;
+    }
+
+    public enum IdleStatus {
+        MOVING, IDLE, PAUSED;
     }
 
     public Position() {
@@ -65,9 +70,9 @@ public class Position implements Serializable, Cloneable {
         power = position.power;
         address = position.address;
         other = position.other;
+        distance = position.distance;
     }
 
-    @Expose
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id", nullable = false, updatable = false, unique = true)
@@ -77,7 +82,6 @@ public class Position implements Serializable, Cloneable {
         return id;
     }
 
-    @Expose
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(foreignKey = @ForeignKey(name = "positions_fkey_device_id"))
     private Device device;
@@ -90,7 +94,6 @@ public class Position implements Serializable, Cloneable {
         this.device = device;
     }
 
-    @Expose
     @Temporal(TemporalType.TIMESTAMP)
     private Date time;
 
@@ -102,7 +105,6 @@ public class Position implements Serializable, Cloneable {
         this.time = time;
     }
 
-    @Expose
     private Boolean valid;
 
     public Boolean getValid() {
@@ -113,7 +115,6 @@ public class Position implements Serializable, Cloneable {
         this.valid = valid;
     }
 
-    @Expose
     private Double latitude;
 
     public Double getLatitude() {
@@ -124,7 +125,6 @@ public class Position implements Serializable, Cloneable {
         this.latitude = latitude;
     }
 
-    @Expose
     private Double longitude;
 
     public Double getLongitude() {
@@ -135,7 +135,6 @@ public class Position implements Serializable, Cloneable {
         this.longitude = longitude;
     }
 
-    @Expose
     private Double altitude;
 
     public Double getAltitude() {
@@ -146,7 +145,6 @@ public class Position implements Serializable, Cloneable {
         this.altitude = altitude;
     }
 
-    @Expose
     private Double speed;
 
     public Double getSpeed() {
@@ -157,7 +155,6 @@ public class Position implements Serializable, Cloneable {
         this.speed = speed;
     }
 
-    @Expose
     private Double course;
 
     public Double getCourse() {
@@ -168,7 +165,10 @@ public class Position implements Serializable, Cloneable {
         this.course = course;
     }
 
-    @Expose
+    /**
+     * @deprecated not used anymore by the traccar backend, left for backwards compatibility
+     */
+    @JsonIgnore
     private Double power;
 
     public Double getPower() {
@@ -179,7 +179,6 @@ public class Position implements Serializable, Cloneable {
         this.power = power;
     }
 
-    @Expose
     private String address;
 
     public String getAddress() {
@@ -190,7 +189,7 @@ public class Position implements Serializable, Cloneable {
         this.address = address;
     }
 
-    @Expose
+    @Column(length = 2048)
     private String other;
 
     public String getOther() {
@@ -201,7 +200,28 @@ public class Position implements Serializable, Cloneable {
         this.other = other;
     }
 
+    private String protocol;
+
+    public String getProtocol() {
+        return protocol;
+    }
+
+    public void setProtocol(String protocol) {
+        this.protocol = protocol;
+    }
+
+    private Date serverTime;
+
+    public Date getServerTime() {
+        return serverTime;
+    }
+
+    public void setServerTime(Date serverTime) {
+        this.serverTime = serverTime;
+    }
+
     @GwtTransient
+    @JsonIgnore
     private transient Status status;
 
     public Status getStatus() {
@@ -212,19 +232,33 @@ public class Position implements Serializable, Cloneable {
         this.status = status;
     }
 
-    @GwtTransient
-    private transient PositionIconType iconType;
+    @Transient
+    @JsonIgnore
+    private IdleStatus idleStatus;
 
-    public PositionIconType getIconType() {
-        return iconType;
+    public IdleStatus getIdleStatus() {
+        return idleStatus;
     }
 
-    public void setIconType(PositionIconType iconType) {
-        this.iconType = iconType;
+    public void setIdleStatus(IdleStatus idleStatus) {
+        this.idleStatus = idleStatus;
     }
 
     @GwtTransient
-    private transient Date idleSince;
+    @JsonIgnore
+    private transient PositionIcon icon;
+
+    public PositionIcon getIcon() {
+        return icon;
+    }
+
+    public void setIcon(PositionIcon icon) {
+        this.icon = icon;
+    }
+
+    @Transient
+    @JsonIgnore
+    private Date idleSince;
 
     public Date getIdleSince() {
         return idleSince;
@@ -235,6 +269,7 @@ public class Position implements Serializable, Cloneable {
     }
 
     @Transient
+    @JsonIgnore
     private double distance;
 
     public double getDistance() {
@@ -244,7 +279,19 @@ public class Position implements Serializable, Cloneable {
     public void setDistance(double distance) {
         this.distance = distance;
     }
-    
+
+    @Transient
+    private List<GeoFence> geoFences;
+
+    public List<GeoFence> getGeoFences() {
+        return geoFences;
+    }
+
+    public void setGeoFences(List<GeoFence> geoFences) {
+        this.geoFences = geoFences;
+    }
+
+
     @Override
     public int hashCode() {
         return (int) (id ^ (id >>> 32));

@@ -15,6 +15,8 @@
  */
 package org.traccar.web.server.model;
 
+import com.google.gwt.user.server.rpc.RemoteServiceServlet;
+import com.google.gwt.user.server.rpc.SerializationPolicy;
 import com.google.inject.Guice;
 import com.google.inject.Injector;
 import com.google.inject.matcher.Matchers;
@@ -24,7 +26,9 @@ import com.google.inject.servlet.GuiceServletContextListener;
 import com.google.inject.servlet.ServletModule;
 import org.traccar.web.client.model.DataService;
 import org.traccar.web.client.model.EventService;
+import org.traccar.web.server.reports.ReportsModule;
 import org.traccar.web.shared.model.ApplicationSettings;
+import org.traccar.web.shared.model.Picture;
 import org.traccar.web.shared.model.User;
 
 import javax.naming.Context;
@@ -46,27 +50,41 @@ public class GuiceServletConfig extends GuiceServletContextListener {
             @Override
             protected void configureServlets() {
                 String persistenceUnit;
+                boolean debug = false;
                 try {
                     Context context = new InitialContext();
                     context.lookup(PERSISTENCE_DATASTORE);
                     persistenceUnit = PERSISTENCE_UNIT_RELEASE;
                 } catch (NamingException e) {
                     persistenceUnit = PERSISTENCE_UNIT_DEBUG;
+                    debug = true;
                 }
 
                 install(new JpaPersistModule(persistenceUnit));
+                install(new ReportsModule());
 
                 filter("/traccar/*").through(PersistFilter.class);
+                filter("/", "/traccar.html", "/m/", "/m/index.html").through(LocaleFilter.class);
 
                 serve("/traccar/dataService").with(DataServiceImpl.class);
                 serve("/traccar/uiStateService").with(UIStateServiceImpl.class);
                 serve("/traccar/eventService").with(EventServiceImpl.class);
                 serve("/traccar/notificationService").with(NotificationServiceImpl.class);
+                serve("/traccar/picturesService").with(PicturesServiceImpl.class);
+                serve("/traccar/reportService").with(ReportServiceImpl.class);
+                serve("/traccar/logService").with(LogServiceImpl.class);
+                serve("/traccar/groupService").with(GroupServiceImpl.class);
 
                 serve("/traccar/rest/*").with(RESTApiServlet.class);
                 serve("/traccar/export/*").with(ExportServlet.class);
                 serve("/traccar/import/*").with(ImportServlet.class);
+                serve("/traccar/report*").with(ReportServlet.class);
                 serve("/traccar/s/login").with(LoginServlet.class);
+                serve("/" + Picture.URL_PREFIX + "*").with(PicturesServlet.class);
+
+                if (debug) {
+                    serve("/api*").with(BackendApiStubServlet.class);
+                }
 
                 UserCheck userCheck = new UserCheck();
                 requestInjection(userCheck);
@@ -75,10 +93,21 @@ public class GuiceServletConfig extends GuiceServletContextListener {
                 bindInterceptor(Matchers.any(), Matchers.annotatedWith(ManagesDevices.class), userCheck);
                 bindInterceptor(Matchers.any(), Matchers.annotatedWith(RequireWrite.class), userCheck);
 
+                MethodCallLogger methodCallLogger = new MethodCallLogger();
+                requestInjection(methodCallLogger);
+                bindInterceptor(Matchers.any(), Matchers.annotatedWith(LogCall.class), methodCallLogger);
+
+                BackendRefresher backendRefresher = new BackendRefresher();
+                requestInjection(backendRefresher);
+                bindInterceptor(Matchers.any(), Matchers.annotatedWith(RefreshBackendPermissions.class), backendRefresher);
+
                 bind(User.class).toProvider(CurrentUserProvider.class);
                 bind(ApplicationSettings.class).toProvider(ApplicationSettingsProvider.class);
                 bind(DataService.class).to(DataServiceImpl.class);
                 bind(EventService.class).to(EventServiceImpl.class);
+
+                bindInterceptor(Matchers.subclassesOf(RemoteServiceServlet.class),
+                        Matchers.returns(Matchers.only(SerializationPolicy.class)), new FixSerializationPolicy());
             }
         };
     }

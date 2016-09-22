@@ -21,7 +21,6 @@ import com.google.gwt.editor.client.SimpleBeanEditorDriver;
 import com.google.gwt.uibinder.client.UiBinder;
 import com.google.gwt.uibinder.client.UiField;
 import com.google.gwt.uibinder.client.UiHandler;
-import com.google.gwt.user.client.ui.Label;
 import com.google.gwt.user.client.ui.Widget;
 import com.sencha.gxt.data.shared.StringLabelProvider;
 import com.sencha.gxt.widget.core.client.Window;
@@ -29,6 +28,7 @@ import com.sencha.gxt.widget.core.client.event.SelectEvent;
 import com.sencha.gxt.widget.core.client.form.*;
 import com.sencha.gxt.widget.core.client.form.validator.MaxNumberValidator;
 import com.sencha.gxt.widget.core.client.form.validator.MinNumberValidator;
+import com.sencha.gxt.widget.core.client.toolbar.LabelToolItem;
 import org.traccar.web.client.ApplicationContext;
 import org.traccar.web.shared.model.UserSettings;
 
@@ -44,11 +44,7 @@ public class FilterDialog implements Editor<UserSettings> {
     interface FilterSettingsDriver extends SimpleBeanEditorDriver<UserSettings, FilterDialog> {
     }
 
-    public interface FilterSettingsHandler {
-        public void onSave(UserSettings filterSettings);
-    }
-
-    private FilterSettingsHandler filterSettingsHandler;
+    private UserSettingsDialog.UserSettingsHandler userSettingsHandler;
 
     @UiField
     Window window;
@@ -70,7 +66,7 @@ public class FilterDialog implements Editor<UserSettings> {
 
     @UiField
     @Ignore
-    Label distanceUnits;
+    LabelToolItem distanceUnits;
 
     @UiField(provided = true)
     SimpleComboBox<String> speedModifier;
@@ -80,12 +76,12 @@ public class FilterDialog implements Editor<UserSettings> {
 
     @UiField
     @Ignore
-    Label speedUnits;
+    LabelToolItem speedUnits;
 
-    public FilterDialog(UserSettings filterSettings, FilterSettingsHandler filterSettingsHandler) {
-        this.filterSettingsHandler = filterSettingsHandler;
+    public FilterDialog(UserSettings filterSettings, UserSettingsDialog.UserSettingsHandler userSettingsHandler) {
+        this.userSettingsHandler = userSettingsHandler;
 
-        speedModifier = new SimpleComboBox<String>(new StringLabelProvider<String>());
+        speedModifier = new SimpleComboBox<>(new StringLabelProvider<String>());
         speedModifier.add("<");
         speedModifier.add("<=");
         speedModifier.add("=");
@@ -95,14 +91,14 @@ public class FilterDialog implements Editor<UserSettings> {
 
         uiBinder.createAndBindUi(this);
 
-        speedUnits.setText(ApplicationContext.getInstance().getUserSettings().getSpeedUnit().getUnit());
-        distanceUnits.setText(ApplicationContext.getInstance().getUserSettings().getSpeedUnit().getDistanceUnit().getUnit());
+        speedUnits.setLabel(ApplicationContext.getInstance().getUserSettings().getSpeedUnit().getUnit());
+        distanceUnits.setLabel(ApplicationContext.getInstance().getUserSettings().getSpeedUnit().getDistanceUnit().getUnit());
 
-        speedForFilter.addValidator(new MinNumberValidator<Double>(0d));
-        speedForFilter.addValidator(new MaxNumberValidator<Double>(30000d));
+        speedForFilter.addValidator(new MinNumberValidator<>(0d));
+        speedForFilter.addValidator(new MaxNumberValidator<>(30000d));
 
-        minDistance.addValidator(new MinNumberValidator<Double>(0d));
-        minDistance.addValidator(new MaxNumberValidator<Double>(30000d));
+        minDistance.addValidator(new MinNumberValidator<>(0d));
+        minDistance.addValidator(new MaxNumberValidator<>(30000d));
 
         driver.initialize(this);
         driver.edit(filterSettings);
@@ -127,7 +123,7 @@ public class FilterDialog implements Editor<UserSettings> {
         if (filterSettings.getMinDistance() != null) {
             filterSettings.setMinDistance(filterSettings.getMinDistance() * filterSettings.getSpeedUnit().getDistanceUnit().getFactor());
         }
-        filterSettingsHandler.onSave(driver.flush());
+        userSettingsHandler.onSave(driver.flush());
     }
 
     @UiHandler("cancelButton")

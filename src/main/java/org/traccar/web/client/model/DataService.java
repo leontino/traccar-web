@@ -15,7 +15,6 @@
  */
 package org.traccar.web.client.model;
 
-import java.io.IOException;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -28,23 +27,25 @@ import com.google.gwt.user.client.rpc.RemoteServiceRelativePath;
 @RemoteServiceRelativePath("dataService")
 public interface DataService extends RemoteService {
 
-    User authenticated() throws IllegalStateException;
+    User authenticated();
 
-    User login(String login, String password, boolean passwordHashed);
+    User login(String login, String password, boolean passwordHashed) throws TraccarException;
 
-    User login(String login, String password);
+    User login(String login, String password) throws TraccarException;
 
     boolean logout();
 
-    User register(String login, String password);
+    User register(String login, String password) throws AccessDeniedException;
 
     List<User> getUsers();
 
-    User addUser(User user);
+    User addUser(User user) throws InvalidMaxDeviceNumberForUserException;
 
-    User updateUser(User user);
+    User updateUser(User user) throws AccessDeniedException;
 
-    User removeUser(User user);
+    UserSettings updateUserSettings(UserSettings userSettings) throws AccessDeniedException;
+
+    User removeUser(User user) throws AccessDeniedException;
 
     List<Device> getDevices();
 
@@ -52,23 +53,37 @@ public interface DataService extends RemoteService {
 
     Device updateDevice(Device device) throws TraccarException;
 
-    Device removeDevice(Device device);
+    Device removeDevice(Device device) throws AccessDeniedException;
 
     Map<User, Boolean> getDeviceShare(Device device);
 
     void saveDeviceShare(Device device, Map<User, Boolean> share);
 
-    List<Position> getPositions(Device device, Date from, Date to, boolean filter);
+    List<Position> getPositions(Device device, Date from, Date to, boolean filter) throws AccessDeniedException;
 
     List<Position> getLatestPositions();
-
-    List<Position> getLatestNonIdlePositions();
 
     ApplicationSettings getApplicationSettings();
 
     void updateApplicationSettings(ApplicationSettings applicationSettings);
 
-    String getTrackerServerLog(short sizeKb);
+    void saveDefaultUserSettigs(UserSettings userSettings);
 
-    void saveRoles(List<User> users);
+    UserSettings getDefaultUserSettings();
+
+    void saveRoles(List<User> users) throws InvalidMaxDeviceNumberForUserException;
+
+    List<GeoFence> getGeoFences();
+
+    GeoFence addGeoFence(GeoFence geoFence) throws TraccarException;
+
+    GeoFence updateGeoFence(GeoFence geoFence) throws TraccarException;
+
+    GeoFence removeGeoFence(GeoFence geoFence);
+
+    Map<User, Boolean> getGeoFenceShare(GeoFence geoFence);
+
+    void saveGeoFenceShare(GeoFence geoFence, Map<User, Boolean> share);
+
+    String sendCommand(Command command) throws AccessDeniedException;
 }

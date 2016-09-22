@@ -15,51 +15,68 @@
  */
 package org.traccar.web.client.controller;
 
-import java.util.Date;
-import java.util.List;
-
-import org.traccar.web.client.Application;
-import org.traccar.web.client.ApplicationContext;
-import org.traccar.web.client.ArchiveStyle;
-import org.traccar.web.client.i18n.Messages;
-import org.traccar.web.client.model.BaseAsyncCallback;
-import org.traccar.web.client.model.PositionProperties;
-import org.traccar.web.client.view.ArchiveView;
-import org.traccar.web.client.view.FilterDialog;
-import org.traccar.web.shared.model.Device;
-import org.traccar.web.shared.model.Position;
-
 import com.google.gwt.core.client.GWT;
 import com.sencha.gxt.data.shared.ListStore;
 import com.sencha.gxt.widget.core.client.ContentPanel;
 import com.sencha.gxt.widget.core.client.box.AlertMessageBox;
+import com.sencha.gxt.widget.core.client.box.AutoProgressMessageBox;
+import org.traccar.web.client.Application;
+import org.traccar.web.client.ApplicationContext;
+import org.traccar.web.client.ArchiveStyle;
+import org.traccar.web.client.MatchService;
+import org.traccar.web.client.OSRMv4MatchService;
+import org.traccar.web.client.OSRMv5MatchService;
+import org.traccar.web.client.Track;
+import org.traccar.web.client.i18n.Messages;
+import org.traccar.web.client.model.BaseAsyncCallback;
+import org.traccar.web.client.view.ArchiveView;
+import org.traccar.web.client.view.FilterDialog;
+import org.traccar.web.client.view.ReportsMenu;
+import org.traccar.web.client.view.UserSettingsDialog;
+import org.traccar.web.shared.model.Device;
+import org.traccar.web.shared.model.MatchServiceType;
+import org.traccar.web.shared.model.Position;
+import org.traccar.web.shared.model.PositionIconType;
+import org.traccar.web.shared.model.Report;
+import org.traccar.web.shared.model.UserSettings;
+
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class ArchiveController implements ContentController, ArchiveView.ArchiveHandler {
 
     public interface ArchiveHandler {
-        public void onSelected(Position position);
+        void onSelected(Position position);
+        void onClear(Device device);
+        void onDrawTrack(Track track);
     }
 
     private final ArchiveHandler archiveHandler;
 
-    private final FilterDialog.FilterSettingsHandler filterSettingsHandler;
+    private final UserSettingsDialog.UserSettingsHandler userSettingsHandler;
 
-    private ListStore<Position> positionStore;
+    private final ArchiveView archiveView;
 
-    private ArchiveView archiveView;
+    private final Messages i18n = GWT.create(Messages.class);
 
-    private Messages i18n = GWT.create(Messages.class);
+    private boolean snapToRoads;
+    private final Map<Long, Track> originalTracks;
+    private final Map<Long, Track> snappedTracks;
+    private final ListStore<Device> deviceStore;
 
-    public ArchiveController(ArchiveHandler archiveHandler, FilterDialog.FilterSettingsHandler filterSettingsHandler, ListStore<Device> deviceStore) {
+    public ArchiveController(ArchiveHandler archiveHandler,
+                             UserSettingsDialog.UserSettingsHandler userSettingsHandler,
+                             ListStore<Device> deviceStore,
+                             ListStore<Report> reportStore,
+                             ReportsMenu.ReportHandler reportHandler) {
         this.archiveHandler = archiveHandler;
-        this.filterSettingsHandler = filterSettingsHandler;
-        PositionProperties positionProperties = GWT.create(PositionProperties.class);
-        positionStore = new ListStore<Position>(positionProperties.id());
-        archiveView = new ArchiveView(this, positionStore, deviceStore);
-    }
-
-    public ListStore<Position> getPositionStore() {
-        return positionStore;
+        this.userSettingsHandler = userSettingsHandler;
+        this.archiveView = new ArchiveView(this, deviceStore, reportStore, reportHandler);
+        this.originalTracks = new HashMap<>();
+        this.snappedTracks = new HashMap<>();
+        this.deviceStore = deviceStore;
     }
 
     @Override
@@ -79,23 +96,31 @@ public class ArchiveController implements ContentController, ArchiveView.Archive
     @Override
     public void onLoad(final Device device, Date from, Date to, boolean filter, final ArchiveStyle style) {
         if (device != null && from != null && to != null) {
+            final AutoProgressMessageBox progress = new AutoProgressMessageBox(i18n.archive(), i18n.loadingData());
+            progress.auto();
+            progress.show();
             Application.getDataService().getPositions(device, from, to, filter, new BaseAsyncCallback<List<Position>>(i18n) {
                 @Override
                 public void onSuccess(List<Position> result) {
-                    positionStore.clear();
+                    archiveHandler.onClear(device);
                     if (result.isEmpty()) {
+                        progress.hide();
                         new AlertMessageBox(i18n.error(), i18n.errNoResults()).show();
-                    } else {
-                        for (Position position : result) {
-                            position.setStatus(Position.Status.ARCHIVE);
-                            if (style.getIconType() != null) { // If style is set, override device's icon
-                                position.setIconType(style.getIconType());
-                            } else {
-                                position.setIconType(device.getIconType().getPositionIconType(position.getStatus()));
-                            }
-                        }
-                        positionStore.addAll(result);
                     }
+                    originalTracks.put(device.getId(), new Track(result, style));
+                    snappedTracks.remove(device.getId());
+                    if (snapToRoads) {
+                        loadSnappedPointsAndShowTrack(device);
+                    } else {
+                        showArchive(device);
+                    }
+                    progress.hide();
+                }
+
+                @Override
+                public void onFailure(Throwable caught) {
+                    progress.hide();
+                    super.onFailure(caught);
                 }
             });
         } else {
@@ -103,14 +128,45 @@ public class ArchiveController implements ContentController, ArchiveView.Archive
         }
     }
 
+    private void showArchive(Device device) {
+        archiveHandler.onClear(device);
+        Track track = snapToRoads ? snappedTracks.get(device.getId()) : originalTracks.get(device.getId());
+        archiveHandler.onDrawTrack(track);
+        archiveView.showPositions(device, track.getPositions());
+    }
+
     @Override
-    public void onClear() {
-        positionStore.clear();
+    public void onSnapToRoads(boolean snapToRoads) {
+        this.snapToRoads = snapToRoads;
+        for (Map.Entry<Long, Track> entry : originalTracks.entrySet()) {
+            Long deviceId = entry.getKey();
+            Device device = deviceStore.findModelWithKey(deviceId.toString());
+            Track snappedTrack = snappedTracks.get(deviceId);
+            if (snapToRoads && snappedTrack == null) {
+                loadSnappedPointsAndShowTrack(device);
+            } else {
+                showArchive(device);
+            }
+        }
+    }
+
+    @Override
+    public void onClear(Device device) {
+        originalTracks.remove(device.getId());
+        snappedTracks.remove(device.getId());
+        archiveHandler.onClear(device);
     }
 
     @Override
     public void onFilterSettings() {
-        new FilterDialog(ApplicationContext.getInstance().getUserSettings(), filterSettingsHandler).show();
+        new FilterDialog(ApplicationContext.getInstance().getUserSettings(), userSettingsHandler).show();
+    }
+
+    @Override
+    public void onChangeArchiveMarkerType(PositionIconType newMarkerType) {
+        UserSettings settings = ApplicationContext.getInstance().getUserSettings();
+        settings.setArchiveMarkerType(newMarkerType);
+        userSettingsHandler.onSave(settings);
     }
 
     public void selectPosition(Position position) {
@@ -121,7 +177,37 @@ public class ArchiveController implements ContentController, ArchiveView.Archive
         archiveView.selectDevice(device);
     }
 
-    public ArchiveStyle getStyle() {
-        return archiveView.style;
+    private void loadSnappedPointsAndShowTrack(final Device device) {
+        MatchService matchService = getMatchService();
+        if (matchService == null) {
+            new AlertMessageBox(i18n.error(), i18n.errSnapToRoads(-1, "Match service implementation cannot be found"));
+        } else {
+            matchService.load(originalTracks.get(device.getId()), new MatchService.Callback() {
+                @Override
+                public void onSuccess(Track track) {
+                    snappedTracks.put(device.getId(), track);
+                    showArchive(device);
+                }
+
+                @Override
+                public void onError(int code, String text) {
+                    new AlertMessageBox(i18n.error(), i18n.errSnapToRoads(code, text)).show();
+                }
+            });
+        }
+    }
+
+    private MatchService getMatchService() {
+        MatchServiceType matchServiceType = ApplicationContext.getInstance().getApplicationSettings().getMatchServiceType();
+        String url = ApplicationContext.getInstance().getApplicationSettings().getMatchServiceURL();
+        if (matchServiceType != null) {
+            switch (matchServiceType) {
+                case OSRM_V4:
+                    return new OSRMv4MatchService(url);
+                case OSRM_V5:
+                    return new OSRMv5MatchService(url);
+            }
+        }
+        return null;
     }
 }

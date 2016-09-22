@@ -15,6 +15,8 @@
  */
 package org.traccar.web.client.i18n;
 
+import org.traccar.web.shared.model.*;
+
 public interface Messages extends com.google.gwt.i18n.client.Messages {
     String authentication();
 
@@ -234,8 +236,6 @@ public interface Messages extends com.google.gwt.i18n.client.Messages {
 
     String smallPalette();
 
-    String markers();
-
     String standardMarkers();
 
     String reducedMarkers();
@@ -253,4 +253,311 @@ public interface Messages extends com.google.gwt.i18n.client.Messages {
     String readOnly();
 
     String protocol();
+
+    String objects();
+
+    String description();
+
+    String geoFence();
+
+    String type();
+
+    String width();
+
+    String radius();
+
+    String color();
+
+    String errGeoFenceIsEmpty();
+
+    String confirmGeoFenceRemoval();
+
+    String newGeoFence();
+
+    String geoFenceType(@Select GeoFenceType type);
+
+    String errSaveChanges();
+
+    String applyToAllDevices();
+
+    String deviceEventType(@Select DeviceEventType type);
+
+    String event();
+
+    String accessToken();
+
+    String messageTemplates();
+
+    String subject();
+
+    String contentType();
+
+    String placeholderDescription(@Select MessagePlaceholder placeholder);
+
+    String defaultNotificationTemplate(@Select DeviceEventType type,
+                                       @Optional String deviceName,
+                                       @Optional String geoFenceName,
+                                       @Optional String eventTime,
+                                       @Optional String positionTime,
+                                       @Optional String maintenanceName,
+                                       @Optional String positionAddress,
+                                       @Optional String positionLat,
+                                       @Optional String positionLon,
+                                       @Optional String positionAlt,
+                                       @Optional String positionSpeed,
+                                       @Optional String positionCourse);
+
+    String noMarkers();
+
+    String select();
+
+    String defaultIcon();
+
+    String selectedIcon();
+
+    String offlineIcon();
+
+    String upload();
+
+    String confirmDeviceIconRemoval();
+
+    String odometer();
+
+    String km();
+
+    String auto();
+
+    String maintenance();
+
+    String serviceName();
+
+    String mileageInterval();
+
+    String lastServiceMileage();
+
+    String remaining();
+
+    String overdue();
+
+    String reset();
+
+    String sensors();
+
+    String parameter();
+
+    String visible();
+
+    String copyFrom();
+
+    String intervals();
+
+    String customIntervals();
+
+    String intervalFrom();
+
+    String text();
+
+    String interval();
+
+    String phoneNumber();
+
+    String plateNumber();
+
+    String vehicleBrandModelColor();
+
+    String photo();
+
+    String errUserAccountBlocked();
+
+    String errUserAccountExpired();
+
+    String errMaxNumberDevicesReached(String p0);
+
+    String errUserSessionExpired();
+
+    String errUserDisconnected();
+
+    String firstName();
+
+    String lastName();
+
+    String companyName();
+
+    String expirationDate();
+
+    String maxNumOfDevices();
+
+    String blocked();
+
+    String overlays();
+
+    String overlay();
+
+    String overlayType(@Select UserSettings.OverlayType type);
+
+    String snapToRoads();
+
+    String period(@Select Period period);
+
+    String periodComboBox_SelectPeriod();
+
+    String traceInterval();
+
+    String followedDeviceZoomLevel();
+
+    String followedDeviceZoomLevelToolTip();
+
+    String useCurrentZoomLevel();
+
+    String errAccessDenied();
+
+    String errMaxNumOfDevicesExceeded(int maxNumOfDevices);
+
+    String timeZone();
+
+    String bingMapsKey();
+
+    String reports();
+
+    String report();
+
+    String timePeriod();
+
+    String generate();
+
+    String newReport();
+
+    String reportType(@Select ReportType type);
+
+    String confirmReportRemoval();
+
+    String routeStart();
+
+    String routeEnd();
+
+    String routeLength();
+
+    String moveDuration();
+
+    String stopDuration();
+
+    String topSpeed();
+
+    String averageSpeed();
+
+    String overspeedCount();
+
+    String speedLimit();
+
+    String status();
+
+    String start();
+
+    String end();
+
+    String duration();
+
+    String moving();
+
+    String stopped();
+
+    String stopPosition();
+
+    String overspeedPosition();
+
+    String geoFenceIn();
+
+    String geoFenceOut();
+
+    String geoFenceName();
+
+    String geoFencePosition();
+
+    String eventPosition();
+
+    String totalOffline();
+
+    String totalGeoFenceEnters();
+
+    String totalGeoFenceExits();
+
+    String totalMaintenanceRequired();
+
+    String date();
+
+    String totalMileage();
+
+    String logs();
+
+    String includeMap();
+
+    String minIdleTime();
+
+    String wrapperLog();
+
+    String preview();
+
+    String maximizeOverviewMap();
+
+    String command();
+
+    String send();
+
+    String customMessage();
+
+    String commandType(@Select CommandType commandType);
+
+    String frequency();
+
+    String groups();
+
+    String newGroup();
+
+    String confirmGroupRemoval();
+
+    String group();
+
+    String noGroup();
+
+    String online();
+
+    String message();
+
+    String notificationExpiryPeriod();
+
+    String loadingData();
+
+    String icon();
+
+    String showOnMap();
+
+    String deviceIconMode(@Select DeviceIconMode mode);
+
+    String iconRotation();
+
+    String arrowColorMoving();
+
+    String arrowColorPaused();
+
+    String arrowColorStopped();
+
+    String arrowColorOffline();
+
+    String showName();
+
+    String showProtocol();
+
+    String showOdometer();
+
+    String matchServiceURL();
+
+    String errSnapToRoads(int code, String text);
+
+    String arrowSize();
+
+    String allowCommandsOnlyForAdmins();
+
+    String defaultPreferences();
+
+    String matchServiceType();
 }

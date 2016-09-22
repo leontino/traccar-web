@@ -15,9 +15,17 @@
  */
 package org.traccar.web.client.view;
 
+import com.sencha.gxt.core.client.IdentityValueProvider;
+import com.sencha.gxt.core.client.ToStringValueProvider;
+import com.sencha.gxt.data.shared.ListStore;
+import com.sencha.gxt.widget.core.client.box.AlertMessageBox;
+import com.sencha.gxt.widget.core.client.form.*;
 import com.sencha.gxt.widget.core.client.form.validator.RegExValidator;
+import com.sencha.gxt.widget.core.client.grid.*;
 import org.traccar.web.client.ApplicationContext;
 import org.traccar.web.client.i18n.Messages;
+import org.traccar.web.client.model.EnumKeyProvider;
+import org.traccar.web.shared.model.DeviceEventType;
 import org.traccar.web.shared.model.User;
 
 import com.google.gwt.core.client.GWT;
@@ -29,9 +37,11 @@ import com.google.gwt.uibinder.client.UiHandler;
 import com.google.gwt.user.client.ui.Widget;
 import com.sencha.gxt.widget.core.client.Window;
 import com.sencha.gxt.widget.core.client.event.SelectEvent;
-import com.sencha.gxt.widget.core.client.form.CheckBox;
-import com.sencha.gxt.widget.core.client.form.PasswordField;
-import com.sencha.gxt.widget.core.client.form.TextField;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
 
 public class UserDialog implements Editor<User> {
 
@@ -46,7 +56,7 @@ public class UserDialog implements Editor<User> {
     }
 
     public interface UserHandler {
-        public void onSave(User user);
+        void onSave(User user);
     }
 
     private UserHandler userHandler;
@@ -61,33 +71,102 @@ public class UserDialog implements Editor<User> {
     PasswordField password;
 
     @UiField
+    TextField firstName;
+
+    @UiField
+    TextField lastName;
+
+    @UiField
+    TextField companyName;
+
+    @UiField
+    TextField phoneNumber;
+
+    @UiField
     CheckBox admin;
 
     @UiField
     CheckBox manager;
 
     @UiField
+    CheckBox readOnly;
+
+    @UiField
+    DateField expirationDate;
+
+    @UiField(provided = true)
+    NumberPropertyEditor<Integer> integerPropertyEditor = new NumberPropertyEditor.IntegerPropertyEditor();
+
+    @UiField
+    NumberField<Integer> maxNumOfDevices;
+
+    @UiField
     TextField email;
 
     @UiField
-    CheckBox notifications;
+    Grid<DeviceEventType> grid;
+
+    @UiField(provided = true)
+    GridView<DeviceEventType> view;
+
+    @UiField(provided = true)
+    ColumnModel<DeviceEventType> columnModel;
+
+    @UiField(provided = true)
+    ListStore<DeviceEventType> notificationEventStore;
 
     @UiField(provided = true)
     Messages i18n = GWT.create(Messages.class);
 
     public UserDialog(User user, UserHandler userHandler) {
         this.userHandler = userHandler;
+        // notification types grid
+        IdentityValueProvider<DeviceEventType> identity = new IdentityValueProvider<>();
+        final CheckBoxSelectionModel<DeviceEventType> selectionModel = new CheckBoxSelectionModel<>(identity);
+
+        ColumnConfig<DeviceEventType, String> nameCol = new ColumnConfig<>(new ToStringValueProvider<DeviceEventType>() {
+            @Override
+            public String getValue(DeviceEventType object) {
+                return i18n.deviceEventType(object);
+            }
+        }, 200, i18n.event());
+        List<ColumnConfig<DeviceEventType, ?>> columns = new ArrayList<>();
+        columns.add(selectionModel.getColumn());
+        columns.add(nameCol);
+
+        columnModel = new ColumnModel<>(columns);
+
+        view = new NoScrollbarGridView<>();
+        view.setAutoFill(true);
+        view.setStripeRows(true);
+
+        notificationEventStore = new ListStore<>(new EnumKeyProvider<DeviceEventType>());
+        notificationEventStore.addAll(Arrays.asList(DeviceEventType.values()));
+
         uiBinder.createAndBindUi(this);
 
-        if (ApplicationContext.getInstance().getUser().getAdmin()) {
-            admin.setEnabled(true);
+        grid.setSelectionModel(selectionModel);
+        grid.getView().setForceFit(true);
+        grid.getView().setAutoFill(true);
+        for (DeviceEventType deviceEventType : user.getTransferNotificationEvents()) {
+            grid.getSelectionModel().select(deviceEventType, true);
         }
 
-        if (ApplicationContext.getInstance().getUser().getAdmin() ||
-            ApplicationContext.getInstance().getUser().getManager()) {
+        User currentUser = ApplicationContext.getInstance().getUser();
+        if (currentUser.getAdmin() || currentUser.getManager()) {
+            admin.setEnabled(currentUser.getAdmin());
             manager.setEnabled(true);
+            readOnly.setEnabled(true);
+            expirationDate.setEnabled(true);
+            maxNumOfDevices.setEnabled(true);
         }
-
+        else {
+            manager.setEnabled(false);
+            admin.setEnabled(false);
+            readOnly.setEnabled(false);
+            expirationDate.setEnabled(false);
+            maxNumOfDevices.setEnabled(false);
+        }
         email.addValidator(new RegExValidator(".+@.+\\.[a-z]+", i18n.invalidEmail()));
 
         driver.initialize(this);
@@ -103,14 +182,27 @@ public class UserDialog implements Editor<User> {
     }
 
     @UiHandler("saveButton")
-    public void onLoginClicked(SelectEvent event) {
-        window.hide();
-        userHandler.onSave(driver.flush());
+    public void onSaveClicked(SelectEvent event) {
+        if (validate()) {
+            window.hide();
+            User user = driver.flush();
+            user.setTransferNotificationEvents(new HashSet<>(grid.getSelectionModel().getSelectedItems()));
+            userHandler.onSave(user);
+        }
     }
 
     @UiHandler("cancelButton")
-    public void onRegisterClicked(SelectEvent event) {
+    public void onCancelClicked(SelectEvent event) {
         window.hide();
     }
 
+    private boolean validate() {
+        String login = this.login.getCurrentValue();
+        String password = this.password.getCurrentValue();
+        if (login == null || login.isEmpty() || password == null || password.isEmpty()) {
+            new AlertMessageBox(i18n.error(), i18n.errUsernameOrPasswordEmpty()).show();
+            return false;
+        }
+        return true;
+    }
 }

@@ -15,22 +15,19 @@
  */
 package org.traccar.web.client.controller;
 
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import com.sencha.gxt.data.shared.event.StoreHandlers;
-import com.sencha.gxt.data.shared.event.StoreRecordChangeEvent;
+import com.sencha.gxt.widget.core.client.Window;
 import com.sencha.gxt.widget.core.client.box.MessageBox;
 import org.traccar.web.client.Application;
 import org.traccar.web.client.ApplicationContext;
 import org.traccar.web.client.i18n.Messages;
 import org.traccar.web.client.model.BaseAsyncCallback;
-import org.traccar.web.client.model.DeviceProperties;
-import org.traccar.web.client.view.DeviceDialog;
-import org.traccar.web.client.view.DeviceShareDialog;
-import org.traccar.web.client.view.DeviceView;
-import org.traccar.web.client.view.PositionInfoPopup;
-import org.traccar.web.shared.model.Device;
+import org.traccar.web.client.model.GroupStore;
+import org.traccar.web.client.state.DeviceVisibilityHandler;
+import org.traccar.web.client.view.*;
+import org.traccar.web.shared.model.*;
 
 import com.google.gwt.core.client.GWT;
 import com.sencha.gxt.data.shared.ListStore;
@@ -39,11 +36,8 @@ import com.sencha.gxt.widget.core.client.Dialog.PredefinedButton;
 import com.sencha.gxt.widget.core.client.box.AlertMessageBox;
 import com.sencha.gxt.widget.core.client.box.ConfirmMessageBox;
 import com.sencha.gxt.widget.core.client.event.DialogHideEvent;
-import org.traccar.web.shared.model.Position;
-import org.traccar.web.shared.model.User;
-import org.traccar.web.shared.model.ValidationException;
 
-public class DeviceController implements ContentController, DeviceView.DeviceHandler {
+public class DeviceController implements ContentController, DeviceView.DeviceHandler, GroupsController.GroupRemoveHandler {
     private final MapController mapController;
 
     private final Application application;
@@ -54,42 +48,41 @@ public class DeviceController implements ContentController, DeviceView.DeviceHan
 
     private Messages i18n = GWT.create(Messages.class);
 
-    private final PositionInfoPopup positionInfo = new PositionInfoPopup();
+    private final PositionInfoPopup positionInfo;
 
     private final StoreHandlers<Device> deviceStoreHandler;
 
+    // geo-fences per device
+    private final Map<Long, Set<GeoFence>> deviceGeoFences;
+
+    private final GroupStore groupStore;
+
+    private final DeviceVisibilityHandler deviceVisibilityHandler;
+
+    private Device selectedDevice;
+
     public DeviceController(MapController mapController,
-                            DeviceView.SettingsHandler settingsHandler,
+                            DeviceView.GeoFenceHandler geoFenceHandler,
+                            DeviceView.CommandHandler commandHandler,
+                            DeviceVisibilityHandler deviceVisibilityHandler,
+                            final ListStore<Device> deviceStore,
                             StoreHandlers<Device> deviceStoreHandler,
+                            ListStore<GeoFence> geoFenceStore,
+                            Map<Long, Set<GeoFence>> deviceGeoFences,
+                            GroupStore groupStore,
+                            final ListStore<Report> reportStore,
+                            ReportsMenu.ReportHandler reportHandler,
                             Application application) {
         this.application = application;
         this.mapController = mapController;
         this.deviceStoreHandler = deviceStoreHandler;
-        DeviceProperties deviceProperties = GWT.create(DeviceProperties.class);
-        deviceStore = new ListStore<Device>(deviceProperties.id());
-        deviceStore.addStoreRecordChangeHandler(new StoreRecordChangeEvent.StoreRecordChangeHandler<Device>() {
-            @Override
-            public void onRecordChange(StoreRecordChangeEvent<Device> event) {
-                if (event.getProperty().getPath().equals("follow")) {
-                    boolean follow = (Boolean) event.getRecord().getValue(event.getProperty());
-                    Device device = event.getRecord().getModel();
-                    if (follow) {
-                        ApplicationContext.getInstance().follow(device);
-                    } else {
-                        ApplicationContext.getInstance().stopFollowing(device);
-                    }
-                } else if (event.getProperty().getPath().equals("recordTrace")) {
-                    boolean recordTrace = (Boolean) event.getRecord().getValue(event.getProperty());
-                    Device device = event.getRecord().getModel();
-                    if (recordTrace) {
-                        ApplicationContext.getInstance().recordTrace(device);
-                    } else {
-                        ApplicationContext.getInstance().stopRecordingTrace(device);
-                    }
-                }
-            }
-        });
-        deviceView = new DeviceView(this, settingsHandler, deviceStore);
+        this.deviceStore = deviceStore;
+        this.positionInfo = new PositionInfoPopup(deviceStore);
+        this.deviceGeoFences = deviceGeoFences;
+        this.groupStore = groupStore;
+        this.deviceVisibilityHandler = deviceVisibilityHandler;
+
+        deviceView = new DeviceView(this, geoFenceHandler, commandHandler, deviceVisibilityHandler, deviceStore, geoFenceStore, groupStore, reportStore, reportHandler);
     }
 
     public ListStore<Device> getDeviceStore() {
@@ -114,7 +107,17 @@ public class DeviceController implements ContentController, DeviceView.DeviceHan
 
     @Override
     public void onSelected(Device device) {
+        onSelected(device, false);
+    }
+
+    @Override
+    public void onSelected(Device device, boolean zoomIn) {
         mapController.selectDevice(device);
+        updateGeoFences(device);
+        selectedDevice = device;
+        if(zoomIn) {
+            mapController.zoomIn(device);
+        }
     }
 
     @Override
@@ -127,11 +130,15 @@ public class DeviceController implements ContentController, DeviceView.DeviceHan
                     public void onSuccess(Device result) {
                         deviceStore.add(result);
                     }
+
                     @Override
                     public void onFailure(Throwable caught) {
                         MessageBox msg = null;
                         if (caught instanceof ValidationException) {
                             msg = new AlertMessageBox(i18n.error(), i18n.errNoDeviceNameOrId());
+                        } else if (caught instanceof MaxDeviceNumberReachedException) {
+                            MaxDeviceNumberReachedException e = (MaxDeviceNumberReachedException) caught;
+                            msg = new AlertMessageBox(i18n.error(), i18n.errMaxNumberDevicesReached(e.getReachedLimit().getMaxNumOfDevices().toString()));
                         } else {
                             msg = new AlertMessageBox(i18n.error(), i18n.errDeviceExists());
                         }
@@ -139,7 +146,7 @@ public class DeviceController implements ContentController, DeviceView.DeviceHan
                             msg.addDialogHideHandler(new DialogHideEvent.DialogHideHandler() {
                                 @Override
                                 public void onDialogHide(DialogHideEvent event) {
-                                    new DeviceDialog(device, AddHandler.this).show();
+                                    new DeviceDialog(device, deviceStore, groupStore, AddHandler.this).show();
                                 }
                             });
                             msg.show();
@@ -149,7 +156,18 @@ public class DeviceController implements ContentController, DeviceView.DeviceHan
             }
         }
 
-        new DeviceDialog(new Device(), new AddHandler()).show();
+        User user = ApplicationContext.getInstance().getUser();
+        if (!user.getAdmin() &&
+                user.getMaxNumOfDevices() != null &&
+                deviceStore.size() >= user.getMaxNumOfDevices()) {
+            new AlertMessageBox(i18n.error(), i18n.errMaxNumberDevicesReached(user.getMaxNumOfDevices().toString())).show();
+            return;
+        }
+
+        Device newDevice = new Device();
+        newDevice.setMaintenances(new ArrayList<Maintenance>());
+        newDevice.setSensors(new ArrayList<Sensor>());
+        new DeviceDialog(newDevice, deviceStore, groupStore, new AddHandler()).show();
     }
 
     @Override
@@ -162,7 +180,17 @@ public class DeviceController implements ContentController, DeviceView.DeviceHan
                     public void onSuccess(Device result) {
                         deviceStore.update(result);
                         mapController.updateIcon(result);
+                        boolean showAlert = false;
+                        for (Maintenance maintenance : result.getMaintenances()) {
+                            if (result.getOdometer() >= maintenance.getLastService() + maintenance.getServiceInterval()) {
+                                showAlert = true;
+                                break;
+                            }
+                        }
+                        mapController.updateAlert(result, showAlert);
+                        deviceVisibilityHandler.updated(result);
                     }
+
                     @Override
                     public void onFailure(Throwable caught) {
                         MessageBox msg = null;
@@ -175,7 +203,7 @@ public class DeviceController implements ContentController, DeviceView.DeviceHan
                             msg.addDialogHideHandler(new DialogHideEvent.DialogHideHandler() {
                                 @Override
                                 public void onDialogHide(DialogHideEvent event) {
-                                    new DeviceDialog(device, UpdateHandler.this).show();
+                                    new DeviceDialog(device, deviceStore, groupStore, UpdateHandler.this).show();
                                 }
                             });
                             msg.show();
@@ -185,7 +213,7 @@ public class DeviceController implements ContentController, DeviceView.DeviceHan
             }
         }
 
-        new DeviceDialog(new Device(device), new UpdateHandler()).show();
+        new DeviceDialog(new Device(device), deviceStore, groupStore, new UpdateHandler()).show();
     }
 
     @Override
@@ -193,10 +221,15 @@ public class DeviceController implements ContentController, DeviceView.DeviceHan
         Application.getDataService().getDeviceShare(device, new BaseAsyncCallback<Map<User, Boolean>>(i18n) {
             @Override
             public void onSuccess(final Map<User, Boolean> share) {
-                new DeviceShareDialog(device, share, new DeviceShareDialog.DeviceShareHandler() {
+                new UserShareDialog(share, new UserShareDialog.UserShareHandler() {
                     @Override
-                    public void onSaveShares(Device device, Map<User, Boolean> shares) {
-                        Application.getDataService().saveDeviceShare(device, shares, new BaseAsyncCallback<Void>(i18n));
+                    public void onSaveShares(Map<User, Boolean> shares, final Window window) {
+                        Application.getDataService().saveDeviceShare(device, shares, new BaseAsyncCallback<Void>(i18n) {
+                            @Override
+                            public void onSuccess(Void result) {
+                                window.hide();
+                            }
+                        });
                     }
                 }).show();
             }
@@ -207,24 +240,27 @@ public class DeviceController implements ContentController, DeviceView.DeviceHan
     public void onRemove(final Device device) {
         final ConfirmMessageBox dialog = new ConfirmMessageBox(i18n.confirm(), i18n.confirmDeviceRemoval());
         dialog.addDialogHideHandler(new DialogHideEvent.DialogHideHandler() {
-			@Override
-			public void onDialogHide(DialogHideEvent event) {
-				if (event.getHideButton() == PredefinedButton.YES) {
+            @Override
+            public void onDialogHide(DialogHideEvent event) {
+                if (event.getHideButton() == PredefinedButton.YES) {
                     Application.getDataService().removeDevice(device, new BaseAsyncCallback<Device>(i18n) {
                         @Override
                         public void onSuccess(Device result) {
                             deviceStore.remove(device);
                         }
                     });
-				}
-			}
-		});
+                }
+            }
+        });
         dialog.show();
     }
 
     @Override
     public void onMouseOver(int mouseX, int mouseY, Device device) {
-        positionInfo.show(mouseX, mouseY, mapController.getLatestPosition(device));
+        Position latestPosition = mapController.getLatestPosition(device);
+        if (latestPosition != null) {
+            positionInfo.show(mouseX, mouseY, latestPosition);
+        }
     }
 
     @Override
@@ -234,9 +270,47 @@ public class DeviceController implements ContentController, DeviceView.DeviceHan
 
     public void selectDevice(Device device) {
         deviceView.selectDevice(device);
+        updateGeoFences(device);
+        selectedDevice = device;
     }
 
     public void doubleClicked(Device device) {
         application.getArchiveController().selectDevice(device);
+    }
+
+    private void updateGeoFences(Device device) {
+        onClearSelection();
+        Set<GeoFence> geoFences = device == null ? null : deviceGeoFences.get(device.getId());
+        if (geoFences != null) {
+            for (GeoFence geoFence : geoFences) {
+                mapController.drawGeoFence(geoFence, true);
+            }
+        }
+    }
+
+    @Override
+    public void onClearSelection() {
+        // remove old geo-fences
+        if (selectedDevice != null) {
+            Set<GeoFence> geoFences = deviceGeoFences.get(selectedDevice.getId());
+            if (geoFences != null) {
+                for (GeoFence geoFence : geoFences) {
+                    mapController.removeGeoFence(geoFence);
+                }
+            }
+        }
+        selectedDevice = null;
+    }
+
+    @Override
+    public void groupRemoved(Group group) {
+        for (int i = 0; i < deviceStore.size(); i++) {
+            Device device = deviceStore.get(i);
+            if (Objects.equals(device.getGroup(), group)) {
+                device.setGroup(null);
+                deviceStore.update(device);
+                deviceVisibilityHandler.updated(device);
+            }
+        }
     }
 }
